@@ -14,6 +14,9 @@ export const createSupabaseServerClient = () => {
   }
 
   const cookieStore = cookies();
+  const mutableCookieStore = cookieStore as unknown as {
+    set?: (name: string, value: string, options?: Record<string, unknown>) => void;
+  };
 
   return createServerClient<Database>(supabaseUrl, supabaseKey, {
     cookies: {
@@ -21,6 +24,13 @@ export const createSupabaseServerClient = () => {
         return cookieStore
           .getAll()
           .map(({ name, value }) => ({ name, value }));
+      },
+      setAll(cookiesToSet) {
+        if (typeof mutableCookieStore.set !== "function") return;
+
+        for (const cookie of cookiesToSet) {
+          mutableCookieStore.set(cookie.name, cookie.value, cookie.options);
+        }
       },
     },
   });

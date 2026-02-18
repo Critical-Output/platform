@@ -6,15 +6,32 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-// Placeholder Database type.
-// Replace this with generated Supabase types for full type safety.
+type GenericRelationship = {
+  foreignKeyName: string;
+  columns: string[];
+  referencedRelation: string;
+  referencedColumns: string[];
+};
+
+type GenericTable = {
+  Row: Record<string, unknown>;
+  Insert: Record<string, unknown>;
+  Update: Record<string, unknown>;
+  Relationships: GenericRelationship[];
+};
+
+type GenericFunction = {
+  Args: Record<string, unknown>;
+  Returns: unknown;
+};
+
+// Loose Database shape used until generated Supabase types are added.
 export type Database = {
   public: {
-    Tables: Record<string, never>;
+    Tables: Record<string, GenericTable>;
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: Record<string, GenericFunction>;
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
 };
-

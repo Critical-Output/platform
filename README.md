@@ -20,6 +20,39 @@ npm run dev
 
 Then open `http://localhost:3000`.
 
+## Auth Setup (WO-2026-003)
+
+This repo now includes Supabase Auth user management:
+
+- Email/password login + signup
+- Google OAuth login
+- Protected `/profile` route via middleware
+- Password reset flow (`/auth/forgot-password` -> `/auth/reset-password`)
+- Customer sync to `public.customers` on signup/login (multi-brand aware)
+
+### Environment variables
+
+Copy `.env.example` to `.env.local` and set:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (used by other work orders; auth flow itself uses RPC + RLS-safe functions)
+- `NEXT_PUBLIC_SITE_URL` (auth callback base URL)
+- One of:
+  - `NEXT_PUBLIC_BRAND_SLUG` (single brand deploy)
+  - `BRAND_DOMAIN_MAP` (multi-brand host -> slug mapping)
+- `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`
+- `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`
+- `RESEND_SMTP_KEY`
+- `RESEND_FROM_EMAIL`
+
+### Supabase notes
+
+- Run migrations to install auth/customer sync helpers and trigger:
+  `supabase/migrations/20260218184500_auth_customer_sync.sql`
+- Google OAuth can require provider/domain configuration in Supabase dashboard.
+  If domain verification is pending, email/password auth still works.
+
 ## Build
 
 ```bash
