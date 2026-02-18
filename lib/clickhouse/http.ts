@@ -60,3 +60,31 @@ export const insertJsonEachRow = async (params: {
     `ClickHouse insert failed (${res.status} ${res.statusText})${text ? `: ${text}` : ""}`,
   );
 };
+
+export const queryJson = async <T = Record<string, unknown>>(params: {
+  config: ClickHouseConfig;
+  query: string;
+}): Promise<T[]> => {
+  const { config, query } = params;
+
+  const endpoint = new URL(config.url);
+  endpoint.searchParams.set("database", normalizeIdentifier(config.database, "CLICKHOUSE_DATABASE"));
+
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+
+  if (config.user) headers.authorization = toBasicAuthHeader(config.user, config.password);
+
+  const body = `${query.trim()} FORMAT JSON`;
+  const res = await fetch(endpoint.toString(), { method: "POST", headers, body });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `ClickHouse query failed (${res.status} ${res.statusText})${text ? `: ${text}` : ""}`,
+    );
+  }
+
+  const json = (await res.json()) as { data: T[] };
+  return json.data;
+};
