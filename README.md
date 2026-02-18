@@ -34,5 +34,7 @@ app/api/events/      # Events ingestion endpoint
 docs/                # Project documentation
 lib/supabase/        # Supabase client helpers
 lib/rudderstack/     # RudderStack client wrapper
+clickhouse/          # ClickHouse schema (local dev init)
+docker-compose.analytics.yml # Local ClickHouse for analytics
 .env.example         # Required environment variables
 ```
