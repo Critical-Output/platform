@@ -21,9 +21,9 @@ stop_conditions:
 priority: 1
 tags: []
 estimate_hours: 0.5
-status: backlog
+status: done
 created_at: 2026-02-17
-updated_at: 2026-02-17
+updated_at: 2026-02-19
 depends_on:
   - WO-2026-002
 era: v0
