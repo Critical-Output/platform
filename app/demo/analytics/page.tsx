@@ -5,7 +5,15 @@ import {
   sampleFunnel,
   sampleHighIntent,
   sampleDaily,
+  sampleJourneys,
+  sampleRevenueByBrand,
+  sampleRevenueByCourse,
+  sampleRevenueByInstructor,
+  sampleMrr,
+  sampleRecommendations,
+  sampleInstructors,
 } from "./sample-data";
+import LiveEventStream from "./live-stream";
 
 export const dynamic = "force-dynamic";
 
@@ -344,6 +352,307 @@ export default async function AnalyticsDemoPage() {
           </table>
         </div>
       </section>
+
+      {/* Section 6: Customer 360 Journey Timeline */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-gray-300 mb-2">Customer 360 &mdash; Journey Timeline</h2>
+        <p className="text-xs text-gray-500 mb-6">Track individual users as they discover, explore, and purchase across the entire brand ecosystem.</p>
+        <div className="space-y-8">
+          {sampleJourneys.map((journey) => (
+            <div key={journey.userId} className="bg-gray-900 rounded-xl p-5">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white">
+                  {journey.displayName.split(" ").map((n) => n[0]).join("")}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">{journey.displayName}</h3>
+                  <p className="text-xs text-gray-500 font-mono">{journey.userId}</p>
+                </div>
+                <div className="ml-auto flex gap-1.5">
+                  {Array.from(new Set(journey.journeySteps.map((s) => s.brand))).map((b) => (
+                    <span key={b} className={`inline-block h-2 w-2 rounded-full ${brandDotColor(b)}`} />
+                  ))}
+                </div>
+              </div>
+              {/* Vertical timeline */}
+              <div className="relative ml-4 border-l border-gray-700/50 pl-6 space-y-0">
+                {journey.journeySteps.map((step, i) => (
+                  <div key={i} className="relative pb-4 last:pb-0">
+                    {/* Dot */}
+                    <div className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-gray-900 ${brandDotColor(step.brand)}`} />
+                    <div className="flex items-start gap-3">
+                      <span className="text-base leading-none shrink-0">{eventIcon(step.eventType)}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${brandBadgeClasses(step.brand)}`}>
+                            {step.brand}
+                          </span>
+                          <span className="text-[10px] text-gray-500">{step.timestamp}</span>
+                        </div>
+                        <p className="text-xs text-gray-300 mt-0.5">{step.details}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Section 7: Revenue Attribution Dashboard */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-gray-300 mb-2">Revenue Attribution</h2>
+        <p className="text-xs text-gray-500 mb-6">Full revenue breakdown across brands, courses, and instructors.</p>
+
+        {/* Revenue overview cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gray-900 rounded-xl p-5 border border-emerald-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Total Revenue</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-400 tabular-nums">
+              ${sampleRevenueByBrand.reduce((s, r) => s + r.revenue, 0).toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-5 border border-emerald-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Total Orders</p>
+            <p className="mt-1 text-2xl font-bold text-white tabular-nums">
+              {sampleRevenueByBrand.reduce((s, r) => s + r.orders, 0).toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-5 border border-emerald-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Avg Order Value</p>
+            <p className="mt-1 text-2xl font-bold text-white tabular-nums">
+              ${(sampleRevenueByBrand.reduce((s, r) => s + r.revenue, 0) / sampleRevenueByBrand.reduce((s, r) => s + r.orders, 0)).toFixed(0)}
+            </p>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-5 border border-emerald-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Current MRR</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-400 tabular-nums">
+              ${sampleMrr[sampleMrr.length - 1].mrr.toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Revenue by Brand */}
+          <div className="bg-gray-900 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">Revenue by Brand</h3>
+            {(() => {
+              const maxRev = Math.max(...sampleRevenueByBrand.map((r) => r.revenue));
+              return sampleRevenueByBrand.map((row) => (
+                <div key={row.brand} className="mb-3 last:mb-0">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-400">{row.brand}</span>
+                    <span className="text-emerald-400 font-semibold tabular-nums">${row.revenue.toLocaleString()}</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
+                      style={{ width: `${(row.revenue / maxRev) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+
+          {/* Revenue by Course (Top 5) */}
+          <div className="bg-gray-900 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">Top Courses by Revenue</h3>
+            {(() => {
+              const maxRev = Math.max(...sampleRevenueByCourse.map((r) => r.revenue));
+              return sampleRevenueByCourse.map((row) => (
+                <div key={row.course} className="mb-3 last:mb-0">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-400">{row.course} <span className="text-gray-600">({row.enrollments} enrolled)</span></span>
+                    <span className="text-emerald-400 font-semibold tabular-nums">${row.revenue.toLocaleString()}</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-teal-400"
+                      style={{ width: `${(row.revenue / maxRev) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+
+          {/* Revenue by Instructor */}
+          <div className="bg-gray-900 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">Revenue by Instructor</h3>
+            <div className="space-y-3">
+              {sampleRevenueByInstructor.map((row) => (
+                <div key={row.instructor} className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                    {row.instructor.split(" ").map((n) => n[0]).join("")}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white font-medium truncate">{row.instructor}</p>
+                    <p className="text-[10px] text-gray-500">{row.brand} &middot; {row.sessions} sessions</p>
+                  </div>
+                  <span className="text-sm text-emerald-400 font-semibold tabular-nums">${row.revenue.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* MRR Trend */}
+          <div className="bg-gray-900 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-4">Monthly Recurring Revenue</h3>
+            <div className="flex items-end gap-3 h-32">
+              {(() => {
+                const maxMrr = Math.max(...sampleMrr.map((m) => m.mrr));
+                return sampleMrr.map((m) => (
+                  <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-emerald-400 tabular-nums">${(m.mrr / 1000).toFixed(1)}k</span>
+                    <div className="w-full rounded-t-md bg-gradient-to-t from-emerald-700 to-emerald-400" style={{ height: `${(m.mrr / maxMrr) * 100}%` }} />
+                    <span className="text-[10px] text-gray-500">{m.month}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span>&#9650;</span>
+              <span className="font-semibold">+247%</span>
+              <span className="text-gray-500">over 6 months</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 8: Live Event Stream */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-gray-300 mb-2">Live Event Stream</h2>
+        <p className="text-xs text-gray-500 mb-4">Real-time events flowing through the PursuitsHQ analytics pipeline.</p>
+        <div className="bg-gray-900 rounded-xl p-5 border border-gray-800">
+          <LiveEventStream />
+        </div>
+      </section>
+
+      {/* Section 9: Cross-Sell Recommendation Engine */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-gray-300 mb-2">Cross-Sell Recommendation Engine</h2>
+        <p className="text-xs text-gray-500 mb-6">AI-powered recommendations based on cross-brand behavior patterns.</p>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {sampleRecommendations.map((rec, i) => (
+            <div
+              key={i}
+              className="relative rounded-xl bg-gray-900 p-5 overflow-hidden"
+              style={{
+                backgroundImage: "linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(168,85,247,0.08) 100%)",
+              }}
+            >
+              {/* Gradient border effect */}
+              <div className="absolute inset-0 rounded-xl border border-indigo-500/20" />
+              <div className="relative">
+                {/* Source */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${brandBadgeClasses(rec.sourceBrand)}`}>
+                    {rec.sourceBrand}
+                  </span>
+                  <span className="text-xs text-gray-300">{rec.sourceAction}</span>
+                </div>
+                {/* Arrow */}
+                <div className="flex items-center gap-2 mb-3 pl-2">
+                  <span className="text-indigo-400">&#8595;</span>
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">recommends</span>
+                </div>
+                {/* Target */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${brandBadgeClasses(rec.recommendedBrand)}`}>
+                    {rec.recommendedBrand}
+                  </span>
+                  <span className="text-xs text-white font-medium">{rec.recommendedAction}</span>
+                </div>
+                {/* Stats */}
+                <div className="flex items-center gap-4 pt-3 border-t border-gray-800">
+                  <div>
+                    <p className="text-lg font-bold text-indigo-400 tabular-nums">{rec.conversionPct}%</p>
+                    <p className="text-[10px] text-gray-500">conversion</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-purple-400 tabular-nums">{rec.confidence}%</p>
+                    <p className="text-[10px] text-gray-500">confidence</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-400 tabular-nums">{rec.sampleSize}</p>
+                    <p className="text-[10px] text-gray-500">sample size</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Section 10: Instructor Leaderboard */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-gray-300 mb-2">Instructor Leaderboard</h2>
+        <p className="text-xs text-gray-500 mb-4">Performance rankings across the PursuitsHQ instructor network.</p>
+        <div className="bg-gray-900 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-gray-400 border-b border-gray-800">
+                <th className="text-left px-4 py-3 font-medium w-12">#</th>
+                <th className="text-left px-4 py-3 font-medium">Instructor</th>
+                <th className="text-left px-4 py-3 font-medium">Brand</th>
+                <th className="text-right px-4 py-3 font-medium">Students</th>
+                <th className="text-left px-4 py-3 font-medium">Rating</th>
+                <th className="text-right px-4 py-3 font-medium">Views</th>
+                <th className="text-right px-4 py-3 font-medium">Bookings</th>
+                <th className="text-right px-4 py-3 font-medium">Revenue</th>
+                <th className="text-right px-4 py-3 font-medium">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sampleInstructors.map((row) => {
+                const medal = row.rank === 1 ? "\ud83e\udd47" : row.rank === 2 ? "\ud83e\udd48" : row.rank === 3 ? "\ud83e\udd49" : "";
+                const isTop = row.rank === 1;
+                return (
+                  <tr
+                    key={row.name}
+                    className={`border-b border-gray-800/50 ${isTop ? "bg-amber-950/20" : "hover:bg-gray-800/30"}`}
+                  >
+                    <td className="px-4 py-3 text-center">
+                      {medal ? <span className="text-base">{medal}</span> : <span className="text-gray-500">{row.rank}</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`font-medium ${isTop ? "text-amber-200" : "text-white"}`}>{row.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${brandBadgeClasses(row.brand)}`}>
+                        {row.brand}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">{row.students}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <span className="text-amber-400 text-xs">{"★".repeat(Math.floor(row.avgRating))}{row.avgRating % 1 >= 0.5 ? "½" : ""}</span>
+                        <span className="text-xs text-gray-400 tabular-nums">{row.avgRating}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-blue-400">{row.videoViews.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-violet-400">{row.bookings}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-emerald-400">${row.revenue.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
+                        row.engagementScore >= 90
+                          ? "bg-emerald-950 text-emerald-300"
+                          : row.engagementScore >= 75
+                          ? "bg-blue-950 text-blue-300"
+                          : "bg-gray-800 text-gray-300"
+                      }`}>
+                        {row.engagementScore}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
@@ -382,4 +691,37 @@ function FunnelBar({
       </div>
     </div>
   );
+}
+
+// Brand color helpers used across sections 6-10
+function brandDotColor(brand: string): string {
+  switch (brand) {
+    case "cti": return "bg-blue-400";
+    case "karen-miles": return "bg-pink-400";
+    case "gebben-miles": return "bg-green-400";
+    case "sporting-clays-academy": return "bg-amber-400";
+    default: return "bg-gray-400";
+  }
+}
+
+function brandBadgeClasses(brand: string): string {
+  switch (brand) {
+    case "cti": return "bg-blue-950/60 text-blue-300";
+    case "karen-miles": return "bg-pink-950/60 text-pink-300";
+    case "gebben-miles": return "bg-green-950/60 text-green-300";
+    case "sporting-clays-academy": return "bg-amber-950/60 text-amber-300";
+    default: return "bg-gray-800 text-gray-300";
+  }
+}
+
+function eventIcon(eventType: string): string {
+  switch (eventType) {
+    case "page_view": return "\ud83d\udd0d";
+    case "video_play": return "\u25b6\ufe0f";
+    case "course_enrolled": return "\ud83d\udcda";
+    case "booking_created": return "\ud83d\udcc5";
+    case "lesson_completed": return "\u2705";
+    case "identify": return "\ud83d\udd11";
+    default: return "\u26aa";
+  }
 }
