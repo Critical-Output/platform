@@ -1,5 +1,7 @@
 "use client";
 
+import { getOrCreateAnonymousId, getOrCreateSessionId } from "@/lib/rudderstack/ids";
+
 type RudderAnalyticsLike = {
   load: (writeKey: string, dataPlaneUrl: string, options?: Record<string, unknown>) => void;
   page: (...args: unknown[]) => void;
@@ -55,6 +57,23 @@ export const getRudderStackClient = async (): Promise<RudderAnalyticsLike | null
   return initPromise;
 };
 
+type AnalyticsContext = Record<string, unknown>;
+type AnalyticsProperties = Record<string, unknown>;
+
+const getEventDefaults = () => {
+  const anonymousId = getOrCreateAnonymousId();
+  const sessionId = getOrCreateSessionId();
+  return { anonymousId, sessionId };
+};
+
+const mergeContext = (context?: AnalyticsContext): AnalyticsContext => {
+  const { sessionId } = getEventDefaults();
+  return {
+    ...(context ?? {}),
+    session_id: sessionId,
+  };
+};
+
 export const rudderstack = {
   page: async (...args: Parameters<RudderAnalyticsLike["page"]>) => {
     const ra = await getRudderStackClient();
@@ -78,3 +97,31 @@ export const rudderstack = {
   },
 };
 
+export const analytics = {
+  track: async (eventName: string, properties?: AnalyticsProperties, context?: AnalyticsContext) => {
+    const { anonymousId } = getEventDefaults();
+    await rudderstack.track(eventName, properties ?? {}, {
+      anonymousId,
+      context: mergeContext(context),
+    });
+  },
+  pageView: async (properties?: AnalyticsProperties, context?: AnalyticsContext) => {
+    await analytics.track("page_view", properties, context);
+  },
+  videoPlay: async (properties?: AnalyticsProperties, context?: AnalyticsContext) => {
+    await analytics.track("video_play", properties, context);
+  },
+  courseEnrolled: async (properties?: AnalyticsProperties, context?: AnalyticsContext) => {
+    await analytics.track("course_enrolled", properties, context);
+  },
+  bookingCreated: async (properties?: AnalyticsProperties, context?: AnalyticsContext) => {
+    await analytics.track("booking_created", properties, context);
+  },
+  identify: async (userId: string, traits?: AnalyticsProperties, context?: AnalyticsContext) => {
+    const { anonymousId } = getEventDefaults();
+    await rudderstack.identify(userId, traits ?? {}, {
+      anonymousId,
+      context: mergeContext(context),
+    });
+  },
+};

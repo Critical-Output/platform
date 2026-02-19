@@ -350,6 +350,17 @@ Indexes:
 
 - `certificates_customer_idx` on `(brand_id, customer_id, issued_at)` where `deleted_at is null`
 
+## Auth Customer Sync Helpers (WO-2026-003)
+
+Migration `supabase/migrations/20260218184500_auth_customer_sync.sql` adds:
+
+- `customers_brand_auth_user_unique` partial unique index on `(brand_id, auth_user_id)` where active and linked.
+- `public.sync_customer_for_user_id(...)` for internal auth/customer linking.
+- `public.sync_customer_for_current_brand(...)` callable by authenticated users (uses `auth.uid()`).
+- Trigger `on_auth_user_created_sync_customer` on `auth.users` to sync customer row on signup when `raw_user_meta_data.brand_slug` is provided.
+
+These helpers attach anonymous IDs to `customers.metadata.anonymous_ids` and preserve RLS semantics by using `auth.uid()` at the entrypoint function.
+
 ## Row Level Security (RLS)
 
 RLS is enabled on all tables listed above.
