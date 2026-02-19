@@ -12,6 +12,8 @@ import {
   sampleMrr,
   sampleRecommendations,
   sampleInstructors,
+  sampleCcwFunnel,
+  sampleCcwSubscription,
 } from "./sample-data";
 import LiveEventStream from "./live-stream";
 
@@ -54,6 +56,8 @@ type DailyRow = {
   video_plays: string;
   enrollments: string;
   bookings: string;
+  ccw_purchases: string;
+  ccw_declines: string;
 };
 
 async function runQuery<T>(query: string): Promise<T[]> {
@@ -328,6 +332,8 @@ export default async function AnalyticsDemoPage() {
                 <th className="text-right px-4 py-3 font-medium">Video Plays</th>
                 <th className="text-right px-4 py-3 font-medium">Enrollments</th>
                 <th className="text-right px-4 py-3 font-medium">Bookings</th>
+                <th className="text-right px-4 py-3 font-medium">CCW Purchases</th>
+                <th className="text-right px-4 py-3 font-medium">CCW Declines</th>
               </tr>
             </thead>
             <tbody>
@@ -339,11 +345,13 @@ export default async function AnalyticsDemoPage() {
                   <td className="px-4 py-2 text-right tabular-nums text-violet-400">{row.video_plays}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-amber-400">{row.enrollments}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-400">{row.bookings}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-orange-400">{row.ccw_purchases}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-red-400">{row.ccw_declines}</td>
                 </tr>
               ))}
               {daily.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
                     No data for the last 30 days. Run the seed script first.
                   </td>
                 </tr>
@@ -651,6 +659,163 @@ export default async function AnalyticsDemoPage() {
               })}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      {/* Section 11: CCW Product Funnel */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-orange-400 mb-2">CCW Product Funnel</h2>
+        <p className="text-xs text-gray-500 mb-6">Concealed Carry Weapon program conversion from evaluation through upsell.</p>
+
+        {/* Funnel visualization */}
+        <div className="bg-gray-900 rounded-xl p-6 border border-orange-900/30" style={{ backgroundImage: "linear-gradient(135deg, rgba(234,88,12,0.06) 0%, rgba(220,38,38,0.06) 100%)" }}>
+          <div className="flex items-center gap-2 md:gap-4">
+            {sampleCcwFunnel.map((step, i) => {
+              const maxCount = sampleCcwFunnel[0].count;
+              const prevCount = i > 0 ? sampleCcwFunnel[i - 1].count : null;
+              const convRate = prevCount ? ((step.count / prevCount) * 100).toFixed(0) : null;
+              return (
+                <div key={step.step} className="flex items-center gap-2 md:gap-4 flex-1">
+                  <div className="flex-1">
+                    <div className="text-center mb-2">
+                      <p className="text-xs text-gray-400">{step.label}</p>
+                      <p className="text-xl md:text-2xl font-bold text-orange-400 tabular-nums">{step.count.toLocaleString()}</p>
+                    </div>
+                    <div className="h-10 rounded-lg bg-gray-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-lg bg-gradient-to-r from-orange-600 to-red-500"
+                        style={{ width: `${(step.count / maxCount) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  {i < sampleCcwFunnel.length - 1 && (
+                    <div className="flex flex-col items-center shrink-0">
+                      <span className="text-orange-400 text-sm">&#8594;</span>
+                      {convRate && <span className="text-[10px] text-orange-300 font-semibold">{convRate}%</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Revenue summary */}
+          <div className="mt-6 pt-4 border-t border-orange-900/30 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-gray-400">Purchase Revenue</p>
+              <p className="text-lg font-bold text-orange-400 tabular-nums">${(sampleCcwFunnel[2].count * 160).toLocaleString()}</p>
+              <p className="text-[10px] text-gray-500">{sampleCcwFunnel[2].count.toLocaleString()} x $160</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Upsell Revenue</p>
+              <p className="text-lg font-bold text-orange-400 tabular-nums">${(sampleCcwFunnel[3].count * 45).toLocaleString()}</p>
+              <p className="text-[10px] text-gray-500">{sampleCcwFunnel[3].count.toLocaleString()} x $45</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Total CCW Revenue</p>
+              <p className="text-lg font-bold text-white tabular-nums">${(sampleCcwFunnel[2].count * 160 + sampleCcwFunnel[3].count * 45).toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Upsell Attach Rate</p>
+              <p className="text-lg font-bold text-orange-400 tabular-nums">{((sampleCcwFunnel[3].count / sampleCcwFunnel[2].count) * 100).toFixed(0)}%</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 12: CCW Subscription Health */}
+      <section className="mb-10">
+        <h2 className="text-lg font-semibold text-orange-400 mb-2">CCW Subscription Health</h2>
+        <p className="text-xs text-gray-500 mb-6">Monthly rebill performance, decline tracking, and recovery metrics.</p>
+
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gray-900 rounded-xl p-5 border border-orange-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Active Subscribers</p>
+            <p className="mt-1 text-2xl font-bold text-orange-400 tabular-nums">{sampleCcwSubscription.activeSubscribers.toLocaleString()}</p>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-5 border border-orange-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Monthly Rebill MRR</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-400 tabular-nums">${sampleCcwSubscription.monthlyRebillRevenue.toLocaleString()}</p>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-5 border border-orange-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Avg Lifetime</p>
+            <p className="mt-1 text-2xl font-bold text-white tabular-nums">{sampleCcwSubscription.avgLifetimeMonths} <span className="text-sm text-gray-400 font-normal">months</span></p>
+          </div>
+          <div className="bg-gray-900 rounded-xl p-5 border border-orange-900/30">
+            <p className="text-xs text-gray-400 uppercase tracking-wider">Churn Rate</p>
+            <p className="mt-1 text-2xl font-bold text-red-400 tabular-nums">{sampleCcwSubscription.churnRate}%</p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Decline Breakdown */}
+          <div className="bg-gray-900 rounded-xl p-5 border border-orange-900/30">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white">Decline Breakdown</h3>
+              <span className="text-xs text-gray-500">{sampleCcwSubscription.totalDeclines.toLocaleString()} total declines</span>
+            </div>
+            <div className="space-y-3">
+              {sampleCcwSubscription.declineCodes.map((dc) => (
+                <div key={dc.code}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-400">{dc.label}</span>
+                    <span className="tabular-nums">
+                      <span className="text-red-400 font-semibold">{dc.count}</span>
+                      <span className="text-gray-500 ml-1">({dc.pct}%)</span>
+                    </span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-red-600 to-orange-500"
+                      style={{ width: `${dc.pct}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-3 border-t border-gray-800 flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+              <span className="text-xs text-emerald-400 font-semibold">{sampleCcwSubscription.recoveryRate}% of declines recovered via retry</span>
+            </div>
+          </div>
+
+          {/* Decline Rate Trend */}
+          <div className="bg-gray-900 rounded-xl p-5 border border-orange-900/30">
+            <h3 className="text-sm font-semibold text-white mb-4">Decline Rate Trend</h3>
+            <div className="flex items-end gap-3 h-32">
+              {(() => {
+                const maxRate = Math.max(...sampleCcwSubscription.declineTrend.map((m) => m.declineRate));
+                return sampleCcwSubscription.declineTrend.map((m) => (
+                  <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-red-400 tabular-nums">{m.declineRate}%</span>
+                    <div
+                      className="w-full rounded-t-md bg-gradient-to-t from-red-700 to-orange-400"
+                      style={{ height: `${(m.declineRate / maxRate) * 100}%` }}
+                    />
+                    <span className="text-[10px] text-gray-500">{m.month}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400">
+              <span>&#9660;</span>
+              <span className="font-semibold">-35%</span>
+              <span className="text-gray-500">decline rate reduction over 6 months</span>
+            </div>
+
+            {/* Rebill success summary */}
+            <div className="mt-5 pt-4 border-t border-gray-800 grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-400">Successful Rebills</p>
+                <p className="text-lg font-bold text-emerald-400 tabular-nums">{sampleCcwSubscription.totalRebills.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Overall Decline Rate</p>
+                <p className="text-lg font-bold text-red-400 tabular-nums">{((sampleCcwSubscription.totalDeclines / (sampleCcwSubscription.totalRebills + sampleCcwSubscription.totalDeclines)) * 100).toFixed(1)}%</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </div>

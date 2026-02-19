@@ -45,6 +45,8 @@ type DailyRow = {
   video_plays: string;
   enrollments: string;
   bookings: string;
+  ccw_purchases: string;
+  ccw_declines: string;
 };
 
 // --- Helper: generate 30 days of daily data ending yesterday ---
@@ -71,14 +73,18 @@ function generateDailyData(): DailyRow[] {
     const videoPlays = Math.round(events * 0.22);
     const enrollments = Math.round(events * 0.08);
     const bookings = Math.round(events * 0.03);
+    const ccwPurchases = Math.round(events * 0.07 * (0.85 + progress * 0.3));
+    const ccwDeclines = Math.round(ccwPurchases * (0.12 - progress * 0.04));
 
     rows.push({
       day,
-      events: String(events),
+      events: String(events + ccwPurchases + ccwDeclines),
       page_views: String(pageViews),
       video_plays: String(videoPlays),
       enrollments: String(enrollments),
       bookings: String(bookings),
+      ccw_purchases: String(ccwPurchases),
+      ccw_declines: String(ccwDeclines),
     });
   }
   return rows;
@@ -88,9 +94,9 @@ function generateDailyData(): DailyRow[] {
 
 export const sampleOverview: OverviewRow[] = [
   {
-    total_events: "12847",
-    unique_users: "863",
-    identified_users: "347",
+    total_events: "18634",
+    unique_users: "1247",
+    identified_users: "512",
   },
 ];
 
@@ -317,6 +323,7 @@ export type MrrMonth = {
 };
 
 export const sampleRevenueByBrand: RevenueByBrand[] = [
+  { brand: "CCW", revenue: 229675, orders: 1928, avgOrderValue: 119.13 },
   { brand: "cti", revenue: 48750, orders: 287, avgOrderValue: 169.86 },
   { brand: "karen-miles", revenue: 28920, orders: 191, avgOrderValue: 151.41 },
   { brand: "gebben-miles", revenue: 21450, orders: 133, avgOrderValue: 161.28 },
@@ -429,3 +436,71 @@ export const sampleInstructors: InstructorRow[] = [
   { rank: 4, name: "Mike Torres", brand: "sporting-clays-academy", students: 45, avgRating: 4.6, videoViews: 1820, bookings: 9, revenue: 5120, engagementScore: 76 },
   { rank: 5, name: "Lisa Chen", brand: "sporting-clays-academy", students: 24, avgRating: 4.7, videoViews: 980, bookings: 6, revenue: 3520, engagementScore: 71 },
 ];
+
+// --- Section 11: CCW Product Funnel ---
+
+export type CcwFunnelStep = {
+  step: string;
+  label: string;
+  count: number;
+};
+
+export const sampleCcwFunnel: CcwFunnelStep[] = [
+  { step: "ccw_eval_completed", label: "Eval Completed", count: 2847 },
+  { step: "ccw_registration", label: "Registration", count: 1923 },
+  { step: "ccw_purchase", label: "Purchase", count: 1241 },
+  { step: "ccw_training_upsell", label: "Training Upsell", count: 687 },
+];
+
+// --- Section 12: CCW Subscription Health ---
+
+export type CcwDeclineCode = {
+  code: string;
+  label: string;
+  count: number;
+  pct: number;
+};
+
+export type CcwDeclineTrend = {
+  month: string;
+  declineRate: number;
+};
+
+export type CcwSubscriptionHealth = {
+  activeSubscribers: number;
+  monthlyRebillRevenue: number;
+  avgLifetimeMonths: number;
+  churnRate: number;
+  totalRebills: number;
+  totalDeclines: number;
+  recoveryRate: number;
+  declineCodes: CcwDeclineCode[];
+  declineTrend: CcwDeclineTrend[];
+};
+
+export const sampleCcwSubscription: CcwSubscriptionHealth = {
+  activeSubscribers: 847,
+  monthlyRebillRevenue: 12692,
+  avgLifetimeMonths: 14.3,
+  churnRate: 6.2,
+  totalRebills: 9418,
+  totalDeclines: 823,
+  recoveryRate: 23,
+  declineCodes: [
+    { code: "card_declined", label: "Generic Decline", count: 247, pct: 30.0 },
+    { code: "insufficient_funds", label: "Insufficient Funds", count: 189, pct: 23.0 },
+    { code: "expired_card", label: "Expired Card", count: 148, pct: 18.0 },
+    { code: "do_not_honor", label: "Do Not Honor", count: 99, pct: 12.0 },
+    { code: "incorrect_cvc", label: "CVC Mismatch", count: 74, pct: 9.0 },
+    { code: "processing_error", label: "Processing Error", count: 41, pct: 5.0 },
+    { code: "lost_card", label: "Lost Card", count: 25, pct: 3.0 },
+  ],
+  declineTrend: [
+    { month: "Aug", declineRate: 12.4 },
+    { month: "Sep", declineRate: 11.1 },
+    { month: "Oct", declineRate: 10.3 },
+    { month: "Nov", declineRate: 9.6 },
+    { month: "Dec", declineRate: 8.8 },
+    { month: "Jan", declineRate: 8.0 },
+  ],
+};

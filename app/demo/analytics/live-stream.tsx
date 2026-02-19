@@ -7,6 +7,7 @@ const BRAND_COLORS: Record<string, { bg: string; text: string; dot: string }> = 
   "karen-miles": { bg: "bg-pink-950/60", text: "text-pink-300", dot: "bg-pink-400" },
   "gebben-miles": { bg: "bg-green-950/60", text: "text-green-300", dot: "bg-green-400" },
   "sporting-clays-academy": { bg: "bg-amber-950/60", text: "text-amber-300", dot: "bg-amber-400" },
+  ccw: { bg: "bg-orange-950/60", text: "text-orange-300", dot: "bg-orange-400" },
 };
 
 const EVENT_TYPES = [
@@ -15,9 +16,25 @@ const EVENT_TYPES = [
   { name: "course_enrolled", icon: "\ud83d\udcda", label: "Enrolled" },
   { name: "booking_created", icon: "\ud83d\udcc5", label: "Booking" },
   { name: "lesson_completed", icon: "\u2705", label: "Completed" },
+  { name: "ccw_eval_completed", icon: "\ud83d\udccb", label: "CCW Eval" },
+  { name: "ccw_registration", icon: "\ud83d\udcdd", label: "CCW Registration" },
+  { name: "ccw_purchase", icon: "\ud83d\udcb3", label: "CCW Purchase" },
+  { name: "ccw_training_upsell", icon: "\u2b06\ufe0f", label: "CCW Upsell" },
+  { name: "ccw_rebill", icon: "\ud83d\udd04", label: "CCW Rebill" },
+  { name: "ccw_decline", icon: "\u274c", label: "CCW Decline" },
 ];
 
-const BRANDS = ["cti", "karen-miles", "gebben-miles", "sporting-clays-academy"];
+const BRANDS = ["cti", "karen-miles", "gebben-miles", "sporting-clays-academy", "ccw"];
+
+const CCW_DECLINE_CODES = [
+  "card_declined",
+  "insufficient_funds",
+  "expired_card",
+  "incorrect_cvc",
+  "processing_error",
+  "do_not_honor",
+  "lost_card",
+];
 
 const PAGES: Record<string, string[]> = {
   cti: ["/cti/courses", "/cti/beginner/lesson-3", "/cti/advanced/overview", "/cti/instructors/anthony-matarese"],
@@ -53,6 +70,7 @@ type LiveEvent = {
   eventType: (typeof EVENT_TYPES)[number];
   user: string;
   details: string;
+  extraStyle?: string;
 };
 
 function pick<T>(arr: T[]): T {
@@ -61,26 +79,56 @@ function pick<T>(arr: T[]): T {
 
 function generateEvent(): LiveEvent {
   const brand = pick(BRANDS);
-  const eventType = pick(EVENT_TYPES);
   const user = pick(USERS);
 
+  // CCW brand only gets CCW-specific event types
+  const ccwEvents = EVENT_TYPES.filter((e) => e.name.startsWith("ccw_"));
+  const brandEvents = EVENT_TYPES.filter((e) => !e.name.startsWith("ccw_"));
+  const eventType = brand === "ccw" ? pick(ccwEvents) : pick(brandEvents);
+
   let details = "";
+  let extraHtml = "";
   switch (eventType.name) {
     case "page_view":
-      details = pick(PAGES[brand]);
+      details = pick(PAGES[brand] ?? PAGES.cti);
       break;
     case "video_play":
-      details = pick(VIDEOS[brand]);
+      details = pick(VIDEOS[brand] ?? VIDEOS.cti);
       break;
     case "course_enrolled":
-      details = `Enrolled in ${pick(COURSES[brand])}`;
+      details = `Enrolled in ${pick(COURSES[brand] ?? COURSES.cti)}`;
       break;
     case "booking_created":
       details = `Booked 1:1 session \u2014 ${brand === "cti" ? "Anthony Matarese Jr" : brand === "karen-miles" ? "Karen Miles" : brand === "gebben-miles" ? "Gebben Miles" : "SCA Instructor"}`;
       break;
     case "lesson_completed":
-      details = `Completed: ${pick(VIDEOS[brand]).split(":").slice(-1)[0].trim()}`;
+      details = `Completed: ${pick(VIDEOS[brand] ?? VIDEOS.cti).split(":").slice(-1)[0].trim()}`;
       break;
+    case "ccw_eval_completed":
+      details = "Completed CCW evaluation questions";
+      break;
+    case "ccw_registration":
+      details = "Registered for CCW program";
+      break;
+    case "ccw_purchase":
+      details = "CCW product purchase — $160.00";
+      extraHtml = "purchase";
+      break;
+    case "ccw_training_upsell":
+      details = "Training upsell purchase — $45.00";
+      extraHtml = "purchase";
+      break;
+    case "ccw_rebill": {
+      const month = Math.floor(Math.random() * 36) + 1;
+      details = `Month ${month} of 36 — $14.99`;
+      break;
+    }
+    case "ccw_decline": {
+      const code = pick(CCW_DECLINE_CODES);
+      details = `Payment declined: ${code}`;
+      extraHtml = "decline";
+      break;
+    }
   }
 
   return {
@@ -90,6 +138,7 @@ function generateEvent(): LiveEvent {
     eventType,
     user,
     details,
+    extraStyle: extraHtml,
   };
 }
 
@@ -157,7 +206,11 @@ export default function LiveEventStream() {
                     {event.timestamp.toLocaleTimeString()}
                   </span>
                 </div>
-                <p className="text-xs text-gray-300 mt-0.5 truncate">{event.details}</p>
+                <p className={`text-xs mt-0.5 truncate ${
+                  event.extraStyle === "decline" ? "text-red-400" :
+                  event.extraStyle === "purchase" ? "text-emerald-400" :
+                  "text-gray-300"
+                }`}>{event.details}</p>
               </div>
             </div>
           );
