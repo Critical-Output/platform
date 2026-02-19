@@ -1,4 +1,11 @@
 import { getClickHouseConfigFromEnv, queryJson } from "@/lib/clickhouse/http";
+import {
+  sampleOverview,
+  sampleCrossBrand,
+  sampleFunnel,
+  sampleHighIntent,
+  sampleDaily,
+} from "./sample-data";
 
 export const dynamic = "force-dynamic";
 
@@ -50,68 +57,72 @@ async function runQuery<T>(query: string): Promise<T[]> {
 // --- Component ---
 
 export default async function AnalyticsDemoPage() {
-  const [overview, crossBrand, funnel, highIntent, daily] = await Promise.all([
-    runQuery<OverviewRow>(`
-      SELECT
-        count() AS total_events,
-        uniqExact(if(user_id != '', user_id, anonymous_id)) AS unique_users,
-        uniqExactIf(user_id, user_id != '') AS identified_users
-      FROM analytics.events
-    `),
-    runQuery<CrossBrandRow>(`
-      SELECT
-        if(user_id != '', user_id, anonymous_id) AS user_key,
-        groupUniqArrayArray(
-          arrayMap(x -> x, [JSONExtractString(properties, 'brand_id')])
-        ) AS brands,
-        length(brands) AS brand_count,
-        count() AS total_events,
-        countIf(event_name = 'booking_created') > 0 AS has_booking
-      FROM analytics.events
-      WHERE JSONExtractString(properties, 'brand_id') != ''
-      GROUP BY user_key
-      HAVING brand_count >= 2
-      ORDER BY total_events DESC
-      LIMIT 20
-    `),
-    runQuery<FunnelRow>(`
-      SELECT
-        JSONExtractString(properties, 'brand_id') AS brand_id,
-        countIf(event_name = 'page_view') AS page_views,
-        countIf(event_name = 'video_play') AS video_plays,
-        countIf(event_name = 'course_enrolled') AS enrollments,
-        countIf(event_name = 'booking_created') AS bookings
-      FROM analytics.events
-      WHERE brand_id != ''
-      GROUP BY brand_id
-      ORDER BY page_views DESC
-    `),
-    runQuery<HighIntentRow>(`
-      SELECT
-        if(user_id != '', user_id, anonymous_id) AS user_key,
-        countIf(event_name = 'video_play') AS video_plays,
-        groupUniqArray(JSONExtractString(properties, 'brand_id')) AS brands_visited
-      FROM analytics.events
-      GROUP BY user_key
-      HAVING video_plays >= 5
-        AND countIf(event_name = 'booking_created') = 0
-      ORDER BY video_plays DESC
-      LIMIT 15
-    `),
-    runQuery<DailyRow>(`
-      SELECT
-        toDate(timestamp) AS day,
-        count() AS events,
-        countIf(event_name = 'page_view') AS page_views,
-        countIf(event_name = 'video_play') AS video_plays,
-        countIf(event_name = 'course_enrolled') AS enrollments,
-        countIf(event_name = 'booking_created') AS bookings
-      FROM analytics.events
-      WHERE timestamp >= now() - INTERVAL 30 DAY
-      GROUP BY day
-      ORDER BY day ASC
-    `),
-  ]);
+  const isLive = getClickHouseConfigFromEnv() !== null;
+
+  const [overview, crossBrand, funnel, highIntent, daily] = isLive
+    ? await Promise.all([
+        runQuery<OverviewRow>(`
+          SELECT
+            count() AS total_events,
+            uniqExact(if(user_id != '', user_id, anonymous_id)) AS unique_users,
+            uniqExactIf(user_id, user_id != '') AS identified_users
+          FROM analytics.events
+        `),
+        runQuery<CrossBrandRow>(`
+          SELECT
+            if(user_id != '', user_id, anonymous_id) AS user_key,
+            groupUniqArrayArray(
+              arrayMap(x -> x, [JSONExtractString(properties, 'brand_id')])
+            ) AS brands,
+            length(brands) AS brand_count,
+            count() AS total_events,
+            countIf(event_name = 'booking_created') > 0 AS has_booking
+          FROM analytics.events
+          WHERE JSONExtractString(properties, 'brand_id') != ''
+          GROUP BY user_key
+          HAVING brand_count >= 2
+          ORDER BY total_events DESC
+          LIMIT 20
+        `),
+        runQuery<FunnelRow>(`
+          SELECT
+            JSONExtractString(properties, 'brand_id') AS brand_id,
+            countIf(event_name = 'page_view') AS page_views,
+            countIf(event_name = 'video_play') AS video_plays,
+            countIf(event_name = 'course_enrolled') AS enrollments,
+            countIf(event_name = 'booking_created') AS bookings
+          FROM analytics.events
+          WHERE brand_id != ''
+          GROUP BY brand_id
+          ORDER BY page_views DESC
+        `),
+        runQuery<HighIntentRow>(`
+          SELECT
+            if(user_id != '', user_id, anonymous_id) AS user_key,
+            countIf(event_name = 'video_play') AS video_plays,
+            groupUniqArray(JSONExtractString(properties, 'brand_id')) AS brands_visited
+          FROM analytics.events
+          GROUP BY user_key
+          HAVING video_plays >= 5
+            AND countIf(event_name = 'booking_created') = 0
+          ORDER BY video_plays DESC
+          LIMIT 15
+        `),
+        runQuery<DailyRow>(`
+          SELECT
+            toDate(timestamp) AS day,
+            count() AS events,
+            countIf(event_name = 'page_view') AS page_views,
+            countIf(event_name = 'video_play') AS video_plays,
+            countIf(event_name = 'course_enrolled') AS enrollments,
+            countIf(event_name = 'booking_created') AS bookings
+          FROM analytics.events
+          WHERE timestamp >= now() - INTERVAL 30 DAY
+          GROUP BY day
+          ORDER BY day ASC
+        `),
+      ])
+    : [sampleOverview, sampleCrossBrand, sampleFunnel, sampleHighIntent, sampleDaily];
 
   const ov = overview[0] ?? { total_events: "0", unique_users: "0", identified_users: "0" };
   const conversionRate =
@@ -124,12 +135,27 @@ export default async function AnalyticsDemoPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-6 md:p-10">
+      {/* Mode banner */}
+      {isLive ? (
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-950/60 border border-emerald-800/40 px-3 py-1 text-xs text-emerald-300">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Live &mdash; Connected to ClickHouse
+        </div>
+      ) : (
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-amber-950/60 border border-amber-800/40 px-3 py-1 text-xs text-amber-300">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+          Demo Mode &mdash; Showing sample data
+        </div>
+      )}
+
       <header className="mb-10">
         <h1 className="text-3xl font-bold tracking-tight text-white">
           PursuitsHQ Analytics Demo
         </h1>
         <p className="mt-1 text-sm text-gray-400">
-          Live data from ClickHouse &middot; 90-day window
+          {isLive
+            ? <>Powered by ClickHouse &#9889; &middot; Live data &middot; 90-day window</>
+            : <>Powered by ClickHouse &#9889; &middot; Synthetic sample data</>}
         </p>
       </header>
 
