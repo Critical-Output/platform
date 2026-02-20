@@ -35,10 +35,22 @@ export default async function Home() {
             Login
           </Link>
           <Link
+            href="/dashboard"
+            className="rounded border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-100"
+          >
+            Dashboard
+          </Link>
+          <Link
             href="/profile"
             className="rounded border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-100"
           >
             Profile
+          </Link>
+          <Link
+            href="/instructor/courses"
+            className="rounded border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-100"
+          >
+            Instructor Admin
           </Link>
         </div>
 
