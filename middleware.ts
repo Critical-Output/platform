@@ -5,7 +5,14 @@ import { hasAuthStatusQuery } from "@/lib/auth/paths";
 import type { Database } from "@/lib/supabase/types";
 
 const isProtectedPath = (pathname: string): boolean =>
-  pathname === "/profile" || pathname.startsWith("/profile/");
+  pathname === "/profile" ||
+  pathname.startsWith("/profile/") ||
+  pathname === "/dashboard" ||
+  pathname.startsWith("/dashboard/") ||
+  pathname === "/instructor" ||
+  pathname.startsWith("/instructor/") ||
+  pathname === "/courses" ||
+  pathname.startsWith("/courses/");
 
 const copySupabaseCookies = (source: NextResponse, target: NextResponse) => {
   for (const cookie of source.cookies.getAll()) {
