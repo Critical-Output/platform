@@ -64,7 +64,7 @@ This is the accepted WO-2026-007 ingestion path:
 Separately, the `/api/events` route accepts Segment/RudderStack payloads and internal payloads for backend events, then inserts into:
 
 - `analytics.events`
-- `analytics.identity_graph` (only when both `anonymousId` + `userId` are present)
+- `analytics.identity_graph` (deterministic rows on `anonymousId` + `userId`, plus anonymous fingerprint observations for probabilistic stitching)
 
 ## 4) Server-side event emission (`POST /api/events`)
 
@@ -138,3 +138,101 @@ FROM analytics.events
 ORDER BY timestamp DESC
 LIMIT 20;
 ```
+
+## 6) Identity Resolution Engine (WO-2026-008)
+
+Identity graph fields are stored in ClickHouse table `analytics.identity_graph`:
+
+- `anonymous_id`
+- `user_id`
+- `email`
+- `phone`
+- `device_fingerprint`
+
+Merge behavior:
+
+- Deterministic login merge (`anonymous_id -> user_id`) with confidence `1.0`
+- Deterministic email merge across brand domains with confidence `1.0`
+- Deterministic phone merge across brand domains with confidence `1.0`
+- Probabilistic device-fingerprint merge with confidence `0.8`
+- Phone identifiers are normalized to digits-only form (for example, `+1 (555) 123-4567` -> `15551234567`).
+
+`POST /api/events` now auto-runs alias merging when it receives an `identify` event containing `userId` plus `email` and/or `phone`.
+
+## 7) Alias API
+
+Endpoint: `POST /api/identity/alias`
+
+Auth:
+
+- Use `x-events-api-key: $EVENTS_API_KEY` outside development.
+
+Payload:
+
+```json
+{
+  "userId": "user_42",
+  "email": "customer@example.com",
+  "phone": "+14045550100",
+  "anonymousId": "anon_current_session"
+}
+```
+
+Behavior:
+
+- Finds all prior `anonymous_id` rows matching the provided email/phone.
+- Inserts deterministic identity edges mapping those anonymous IDs to `userId`.
+
+## 8) dbt Batch Resolution (every 15 min)
+
+dbt project location: `clickhouse/dbt_identity`
+
+Run once:
+
+```bash
+dbt run --project-dir clickhouse/dbt_identity --select identity_alias_candidates identity_customer_profiles identity_resolved_events
+```
+
+Recommended scheduler:
+
+```bash
+*/15 * * * * cd /path/to/repo && scripts/run-identity-resolution-dbt.sh >> /var/log/pcc-identity-dbt.log 2>&1
+```
+
+Produced models:
+
+- `identity_alias_candidates`: canonical anonymous-to-user mapping
+- `identity_customer_profiles`: all identifiers linked to each canonical user (admin view source)
+- `identity_resolved_events`: canonical user ID backfilled for historical anonymous events
+
+Stop-condition control (disable probabilistic matching):
+
+```bash
+dbt run --project-dir clickhouse/dbt_identity --vars '{"enable_probabilistic_matching": false}'
+```
+
+## 9) Admin Identifier View
+
+API endpoint: `GET /api/identity/admin?user_id=<canonical_user_id>&email=<optional>`
+
+- Returns all linked anonymous IDs, emails, phones, device fingerprints, and identity methods for a profile.
+- The authenticated profile page (`/profile`) also renders this linked-identifier summary for the current user.
+
+## 10) GDPR Deletion
+
+Endpoint: `POST /api/identity/gdpr-delete` (or `DELETE` with same JSON body)
+
+Example payload:
+
+```json
+{
+  "userId": "user_42",
+  "email": "customer@example.com"
+}
+```
+
+Behavior:
+
+- Executes `ALTER TABLE identity_graph DELETE WHERE ...` to remove all matching identity graph entries.
+- Resolves linked identifiers to fixed point before issuing the delete mutation.
+- Returns `mutationQueued: true` because MergeTree deletions run asynchronously.

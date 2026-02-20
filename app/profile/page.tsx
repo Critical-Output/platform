@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/auth/actions";
 import AnonymousIdLinker from "@/app/profile/anonymous-id-linker";
 import { resolveBrandSlugFromHeaders } from "@/lib/brands/resolve";
+import { getClickHouseConfigFromEnv } from "@/lib/clickhouse/http";
+import { getIdentityProfileForUser, type IdentityProfile } from "@/lib/identity/admin";
 import { ANALYTICS_ANON_ID_COOKIE } from "@/lib/rudderstack/constants";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -82,6 +84,24 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   }
 
   const customerRows = (data ?? []) as CustomerProfileRow[];
+  let identityProfile: IdentityProfile | null = null;
+  let identityProfileError: string | null = null;
+
+  const clickHouseConfig = getClickHouseConfigFromEnv();
+  if (clickHouseConfig) {
+    try {
+      identityProfile = await getIdentityProfileForUser({
+        config: clickHouseConfig,
+        userId: user.id,
+        email: user.email ?? null,
+      });
+    } catch (error) {
+      identityProfileError =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Identity graph lookup failed.";
+    }
+  }
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl px-6 py-12">
@@ -148,6 +168,39 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
             </article>
           );
         })}
+      </section>
+
+      <section className="mt-8 space-y-3">
+        <h2 className="text-lg font-semibold">Identity profile</h2>
+        {!clickHouseConfig ? (
+          <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            ClickHouse is not configured; identity profile data is unavailable.
+          </p>
+        ) : null}
+
+        {identityProfileError ? (
+          <p className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {identityProfileError}
+          </p>
+        ) : null}
+
+        {identityProfile ? (
+          <article className="rounded border border-gray-200 p-4 text-sm">
+            <p>
+              Canonical user ID: <span className="font-medium">{identityProfile.canonicalUserId}</span>
+            </p>
+            <p className="mt-1">Linked anonymous IDs: {identityProfile.anonymousIds.length}</p>
+            <p className="mt-1">Emails: {identityProfile.emails.join(", ") || "None"}</p>
+            <p className="mt-1">Phones: {identityProfile.phones.join(", ") || "None"}</p>
+            <p className="mt-1">
+              Device fingerprints: {identityProfile.deviceFingerprints.length || 0}
+            </p>
+            <p className="mt-1">Identity edges: {identityProfile.edgeCount}</p>
+            <p className="mt-1">
+              Last seen in identity graph: {identityProfile.lastSeen ?? "No identity edges yet"}
+            </p>
+          </article>
+        ) : null}
       </section>
 
       <p className="mt-8 text-sm text-gray-600">
