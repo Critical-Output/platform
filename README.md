@@ -45,6 +45,9 @@ Copy `.env.example` to `.env.local` and set:
 - `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET`
 - `RESEND_SMTP_KEY`
 - `RESEND_FROM_EMAIL`
+- `RESEND_API_KEY` (booking email confirmations)
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (booking SMS)
+- `BOOKING_REMINDER_API_KEY` (protects reminder dispatch endpoint)
 
 ### Supabase notes
 

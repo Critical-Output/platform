@@ -1,0 +1,14 @@
+name: pcc_identity_resolution
+version: 1.0.0
+config-version: 2
+profile: pcc_identity_resolution
+
+model-paths: ["models"]
+
+models:
+  pcc_identity_resolution:
+    marts:
+      +materialized: table
+
+vars:
+  enable_probabilistic_matching: true
