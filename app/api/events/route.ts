@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { getClickHouseConfigFromEnv, insertJsonEachRow } from "@/lib/clickhouse/http";
+import { mergeAnonymousSessionsForUser } from "@/lib/identity/alias";
+import {
+  formatClickHouseTimestamp,
+  normalizeAnonymousId,
+  normalizeDeviceFingerprint,
+  normalizeEmail,
+  normalizePhone,
+  normalizeUserId,
+} from "@/lib/identity/normalize";
 import {
   ANALYTICS_ANON_ID_COOKIE,
   ANALYTICS_SESSION_ID_COOKIE,
@@ -59,6 +68,13 @@ type ClickHouseIdentityRow = {
   metadata: string;
 };
 
+type AliasMergeRequest = {
+  userId: string;
+  email?: string | null;
+  phone?: string | null;
+  anonymousId?: string | null;
+};
+
 const normalizeId = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const v = value.trim();
@@ -105,17 +121,45 @@ const readCookie = (cookieHeader: string | null, name: string): string | null =>
 };
 
 const toClickHouseTimestamp = (value: unknown): string => {
-  const d =
+  const date =
     typeof value === "string" && value.trim()
       ? new Date(value)
       : new Date();
+  return formatClickHouseTimestamp(Number.isNaN(date.getTime()) ? new Date() : date);
+};
 
-  const date = Number.isNaN(d.getTime()) ? new Date() : d;
-  const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+const extractIdentityIdentifiers = (params: {
+  traits?: JsonObject;
+  properties: JsonObject;
+  context: JsonObject;
+}) => {
+  const email = normalizeEmail(
+    params.traits?.email ??
+      params.properties.email ??
+      params.properties.user_email,
+  );
 
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(
-    date.getUTCHours(),
-  )}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}.${pad(date.getUTCMilliseconds(), 3)}`;
+  const phone = normalizePhone(
+    params.traits?.phone ??
+      params.properties.phone ??
+      params.properties.phone_number ??
+      params.properties.mobile,
+  );
+
+  const contextDevice = params.context.device;
+  const contextDeviceId =
+    contextDevice && typeof contextDevice === "object"
+      ? (contextDevice as { id?: unknown }).id
+      : undefined;
+
+  const deviceFingerprint = normalizeDeviceFingerprint(
+    params.context.device_fingerprint ??
+      params.context.deviceFingerprint ??
+      contextDeviceId ??
+      params.properties.device_fingerprint,
+  );
+
+  return { email, phone, deviceFingerprint };
 };
 
 const normalizeMessageToRows = (message: SegmentLikeMessage | InternalEvent, cookieHeader: string | null) => {
@@ -141,14 +185,14 @@ const normalizeMessageToRows = (message: SegmentLikeMessage | InternalEvent, coo
   const event_id = eventIdCandidate && isUuid(eventIdCandidate) ? eventIdCandidate : crypto.randomUUID();
 
   const anonymousId =
-    normalizeId((message as InternalEvent).anonymous_id) ??
-    normalizeId((message as SegmentLikeMessage).anonymousId) ??
-    normalizeId(readCookie(cookieHeader, ANALYTICS_ANON_ID_COOKIE)) ??
+    normalizeAnonymousId((message as InternalEvent).anonymous_id) ??
+    normalizeAnonymousId((message as SegmentLikeMessage).anonymousId) ??
+    normalizeAnonymousId(readCookie(cookieHeader, ANALYTICS_ANON_ID_COOKIE)) ??
     "";
 
   const userId =
-    normalizeId((message as InternalEvent).user_id) ??
-    normalizeId((message as SegmentLikeMessage).userId) ??
+    normalizeUserId((message as InternalEvent).user_id) ??
+    normalizeUserId((message as SegmentLikeMessage).userId) ??
     "";
 
   const contextObj =
@@ -163,11 +207,13 @@ const normalizeMessageToRows = (message: SegmentLikeMessage | InternalEvent, coo
     normalizeId(readCookie(cookieHeader, ANALYTICS_SESSION_ID_COOKIE)) ??
     "";
 
+  const traitsObj = (message as SegmentLikeMessage).traits as JsonObject | undefined;
+
   const propertiesObj =
     ((message as SegmentLikeMessage).properties as JsonObject | undefined) ??
     ((message as InternalEvent).properties as JsonObject | undefined) ??
     // RudderStack/Segment identify payloads use traits.
-    ((message as SegmentLikeMessage).traits as JsonObject | undefined) ??
+    traitsObj ??
     {};
 
   const timestamp = toClickHouseTimestamp(
@@ -186,28 +232,58 @@ const normalizeMessageToRows = (message: SegmentLikeMessage | InternalEvent, coo
   };
 
   const identityRows: ClickHouseIdentityRow[] = [];
-  if (anonymousId && userId) {
-    const traits = isSegment ? (message as SegmentLikeMessage).traits : undefined;
-    const email = normalizeId(traits?.email);
-    const phone = normalizeId(traits?.phone);
-    const device_fingerprint = normalizeId((contextObj as { device_fingerprint?: unknown }).device_fingerprint);
+  let aliasMergeRequest: AliasMergeRequest | null = null;
+  const identifiers = extractIdentityIdentifiers({
+    traits: isSegment ? traitsObj : undefined,
+    properties: propertiesObj,
+    context: contextObj,
+  });
 
+  if (anonymousId && userId) {
     identityRows.push({
       anonymous_id: anonymousId,
       user_id: userId,
-      email: email ?? null,
-      phone: phone ?? null,
-      device_fingerprint: device_fingerprint ?? null,
+      email: identifiers.email ?? null,
+      phone: identifiers.phone ?? null,
+      device_fingerprint: identifiers.deviceFingerprint ?? null,
       confidence: 1.0,
-      method: (message as SegmentLikeMessage).type ?? "event",
+      method: eventName === "identify" ? "deterministic_login" : "deterministic_user_id",
       first_seen: timestamp,
       last_seen: timestamp,
       last_event_id: event_id,
       metadata: safeJsonStringify({ source: "api/events" }),
     });
+
+    if (eventName === "identify" && (identifiers.email || identifiers.phone)) {
+      aliasMergeRequest = {
+        userId,
+        email: identifiers.email,
+        phone: identifiers.phone,
+        anonymousId,
+      };
+    }
   }
 
-  return { ok: true as const, eventRow, identityRows };
+  if (anonymousId && !userId && identifiers.deviceFingerprint) {
+    identityRows.push({
+      anonymous_id: anonymousId,
+      user_id: "",
+      email: identifiers.email ?? null,
+      phone: identifiers.phone ?? null,
+      device_fingerprint: identifiers.deviceFingerprint,
+      confidence: 0.8,
+      method: "probabilistic_device_fingerprint_observation",
+      first_seen: timestamp,
+      last_seen: timestamp,
+      last_event_id: event_id,
+      metadata: safeJsonStringify({
+        source: "api/events",
+        anonymous_observation: true,
+      }),
+    });
+  }
+
+  return { ok: true as const, eventRow, identityRows, aliasMergeRequest };
 };
 
 export async function POST(request: Request) {
@@ -257,6 +333,7 @@ export async function POST(request: Request) {
 
     const eventRows: ClickHouseEventRow[] = [];
     const identityRows: ClickHouseIdentityRow[] = [];
+    const aliasMergeRequests: AliasMergeRequest[] = [];
 
     for (const msg of messages) {
       const normalized = normalizeMessageToRows(msg, cookieHeader);
@@ -265,6 +342,9 @@ export async function POST(request: Request) {
       }
       eventRows.push(normalized.eventRow);
       identityRows.push(...normalized.identityRows);
+      if (normalized.aliasMergeRequest) {
+        aliasMergeRequests.push(normalized.aliasMergeRequest);
+      }
     }
 
     if (eventRows.length === 0) {
@@ -282,6 +362,27 @@ export async function POST(request: Request) {
     await insertJsonEachRow({ config, table: "events", rows: eventRows });
     if (identityRows.length > 0) {
       await insertJsonEachRow({ config, table: "identity_graph", rows: identityRows });
+    }
+
+    if (aliasMergeRequests.length > 0) {
+      const dedupedRequests = new Map<string, AliasMergeRequest>();
+      for (const requestItem of aliasMergeRequests) {
+        const key = `${requestItem.userId}|${requestItem.email ?? ""}|${requestItem.phone ?? ""}|${requestItem.anonymousId ?? ""}`;
+        if (!dedupedRequests.has(key)) {
+          dedupedRequests.set(key, requestItem);
+        }
+      }
+
+      for (const requestItem of dedupedRequests.values()) {
+        await mergeAnonymousSessionsForUser({
+          config,
+          userId: requestItem.userId,
+          email: requestItem.email,
+          phone: requestItem.phone,
+          anonymousId: requestItem.anonymousId,
+          source: "api/events-identify",
+        });
+      }
     }
 
     return NextResponse.json({ ok: true, inserted: eventRows.length });

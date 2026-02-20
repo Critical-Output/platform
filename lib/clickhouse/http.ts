@@ -1,4 +1,4 @@
-type ClickHouseConfig = {
+export type ClickHouseConfig = {
   url: string;
   user?: string;
   password?: string;
@@ -30,6 +30,9 @@ const toBasicAuthHeader = (user: string, password?: string) => {
   const token = Buffer.from(`${user}:${password ?? ""}`).toString("base64");
   return `Basic ${token}`;
 };
+
+export const escapeClickHouseStringLiteral = (value: string): string =>
+  value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 
 export const insertJsonEachRow = async (params: {
   config: ClickHouseConfig;
@@ -87,4 +90,31 @@ export const queryJson = async <T = Record<string, unknown>>(params: {
 
   const json = (await res.json()) as { data: T[] };
   return json.data;
+};
+
+export const executeSql = async (params: {
+  config: ClickHouseConfig;
+  query: string;
+}): Promise<string> => {
+  const { config, query } = params;
+
+  const endpoint = new URL(config.url);
+  endpoint.searchParams.set("database", normalizeIdentifier(config.database, "CLICKHOUSE_DATABASE"));
+
+  const headers: Record<string, string> = {
+    "content-type": "text/plain; charset=utf-8",
+  };
+
+  if (config.user) headers.authorization = toBasicAuthHeader(config.user, config.password);
+
+  const body = query.trim();
+  const res = await fetch(endpoint.toString(), { method: "POST", headers, body });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `ClickHouse command failed (${res.status} ${res.statusText})${text ? `: ${text}` : ""}`,
+    );
+  }
+
+  return res.text().catch(() => "");
 };
