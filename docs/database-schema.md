@@ -84,6 +84,7 @@ Indexes:
 
 - `id uuid`
 - `brand_id uuid -> public.brands(id)`
+- `auth_user_id uuid -> auth.users(id)` (nullable; enables instructor self-service access)
 - `email text`
 - `first_name text`
 - `last_name text`
@@ -97,12 +98,13 @@ Indexes:
 Indexes:
 
 - `instructors_brand_email_lookup_idx` on `(brand_id, lower(email))` where `deleted_at is null`
+- `instructors_auth_user_idx` on `(auth_user_id)` where `deleted_at is null`
 
 ### `public.instructors_brands`
 
 - `id uuid`
 - `brand_id uuid -> public.brands(id)`
-- `instructor_id uuid` (FK: `(instructor_id, brand_id) -> public.instructors(id, brand_id)`)
+- `instructor_id uuid -> public.instructors(id)` (allows one instructor across multiple brands)
 - `metadata jsonb`
 - `created_at timestamptz`
 - `updated_at timestamptz`
@@ -227,13 +229,23 @@ Indexes:
 - `id uuid`
 - `brand_id uuid -> public.brands(id)`
 - `customer_id uuid` (FK: `(customer_id, brand_id) -> public.customers(id, brand_id)`)
-- `instructor_id uuid` (nullable; FK: `(instructor_id, brand_id) -> public.instructors(id, brand_id)`)
+- `instructor_id uuid` (nullable; FK: `instructor_id -> public.instructors(id)`)
 - `course_id uuid` (nullable; FK: `(course_id, brand_id) -> public.courses(id, brand_id)`)
-- `status text` (`scheduled|completed|cancelled|no_show`)
+- `status text` (`pending|confirmed|completed|cancelled|no_show`)
 - `start_at timestamptz`
 - `end_at timestamptz` (`end_at > start_at`)
+- `student_timezone text` (default `UTC`)
+- `instructor_timezone text` (default `UTC`)
 - `location text`
 - `notes text`
+- `instructor_notes text` (instructor/admin post-session notes)
+- `payment_status text` (`pending|paid|failed|refunded|waived`)
+- `payment_reference text`
+- `confirmed_at timestamptz`
+- `completed_at timestamptz`
+- `cancelled_at timestamptz`
+- `no_show_at timestamptz`
+- `reminder_24h_sent_at timestamptz`
 - `metadata jsonb`
 - `created_at timestamptz`
 - `updated_at timestamptz`
@@ -244,6 +256,90 @@ Indexes:
 
 - `bookings_instructor_schedule_idx` on `(brand_id, instructor_id, start_at)` where `deleted_at is null`
 - `bookings_customer_schedule_idx` on `(brand_id, customer_id, start_at)` where `deleted_at is null`
+- `bookings_status_start_idx` on `(brand_id, status, start_at)` where `deleted_at is null`
+
+### `public.instructor_scheduling_settings`
+
+- `id uuid`
+- `brand_id uuid -> public.brands(id)`
+- `instructor_id uuid -> public.instructors(id)`
+- `timezone text` (default `UTC`)
+- `session_duration_minutes integer` (default `60`)
+- `buffer_minutes integer` (default `15`)
+- `advance_booking_days integer` (default `90`)
+- `cancellation_cutoff_hours integer` (default `24`)
+- `metadata jsonb`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+- `created_by uuid -> auth.users(id)`
+- `deleted_at timestamptz`
+
+Indexes:
+
+- `instructor_scheduling_settings_unique` on `(brand_id, instructor_id)` where `deleted_at is null`
+
+### `public.instructor_availability_rules`
+
+- `id uuid`
+- `brand_id uuid -> public.brands(id)`
+- `instructor_id uuid -> public.instructors(id)`
+- `weekday integer` (`0..6`, Sunday-based)
+- `start_time time`
+- `end_time time` (`end_time > start_time`)
+- `is_active boolean`
+- `metadata jsonb`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+- `created_by uuid -> auth.users(id)`
+- `deleted_at timestamptz`
+
+Indexes:
+
+- `instructor_availability_rules_lookup_idx` on `(brand_id, instructor_id, weekday)` where `deleted_at is null`
+
+### `public.instructor_availability_overrides`
+
+- `id uuid`
+- `brand_id uuid -> public.brands(id)`
+- `instructor_id uuid -> public.instructors(id)`
+- `override_date date`
+- `is_available boolean`
+- `start_time time` (required when `is_available = true`)
+- `end_time time` (required when `is_available = true`)
+- `reason text`
+- `metadata jsonb`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+- `created_by uuid -> auth.users(id)`
+- `deleted_at timestamptz`
+
+Indexes:
+
+- `instructor_availability_overrides_lookup_idx` on `(brand_id, instructor_id, override_date)` where `deleted_at is null`
+
+### `public.booking_notifications`
+
+- `id uuid`
+- `booking_id uuid -> public.bookings(id)`
+- `brand_id uuid -> public.brands(id)`
+- `channel text` (`sms|email`)
+- `template text` (`booking_created|booking_reminder_24h`)
+- `provider text` (`twilio|resend|internal`)
+- `recipient text`
+- `status text` (`pending|sent|failed|skipped`)
+- `provider_message_id text`
+- `error_message text`
+- `sent_at timestamptz`
+- `metadata jsonb`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+- `created_by uuid -> auth.users(id)`
+- `deleted_at timestamptz`
+
+Indexes:
+
+- `booking_notifications_booking_idx` on `(brand_id, booking_id, template, channel)` where `deleted_at is null`
+- `booking_notifications_status_idx` on `(status, created_at)` where `deleted_at is null`
 
 ### `public.subscriptions`
 
