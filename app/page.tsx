@@ -40,6 +40,12 @@ export default async function Home() {
           >
             Profile
           </Link>
+          <Link
+            href="/courses"
+            className="rounded border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-100"
+          >
+            Courses
+          </Link>
         </div>
 
         {EventDemo ? <EventDemo /> : null}
