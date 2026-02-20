@@ -227,13 +227,22 @@ Indexes:
 - `id uuid`
 - `brand_id uuid -> public.brands(id)`
 - `customer_id uuid` (FK: `(customer_id, brand_id) -> public.customers(id, brand_id)`)
-- `instructor_id uuid` (nullable; FK: `(instructor_id, brand_id) -> public.instructors(id, brand_id)`)
+- `instructor_id uuid` (nullable; FK: `instructor_id -> public.instructors(id)`, brand assignment enforced via `public.instructor_in_brand(...)`)
 - `course_id uuid` (nullable; FK: `(course_id, brand_id) -> public.courses(id, brand_id)`)
-- `status text` (`scheduled|completed|cancelled|no_show`)
+- `status text` (`pending|confirmed|completed|cancelled|no_show`)
+- `payment_status text` (`unpaid|paid|failed|refunded`)
+- `payment_reference text`
 - `start_at timestamptz`
 - `end_at timestamptz` (`end_at > start_at`)
+- `student_timezone text` (default `UTC`)
+- `instructor_timezone text` (default `UTC`)
+- `confirmed_at timestamptz`
+- `cancelled_at timestamptz`
+- `completed_at timestamptz`
+- `reminder_sent_at timestamptz`
 - `location text`
 - `notes text`
+- `instructor_notes text`
 - `metadata jsonb`
 - `created_at timestamptz`
 - `updated_at timestamptz`
@@ -244,6 +253,8 @@ Indexes:
 
 - `bookings_instructor_schedule_idx` on `(brand_id, instructor_id, start_at)` where `deleted_at is null`
 - `bookings_customer_schedule_idx` on `(brand_id, customer_id, start_at)` where `deleted_at is null`
+- `bookings_upcoming_instructor_idx` on `(brand_id, instructor_id, start_at)` where `deleted_at is null and status in ('pending','confirmed')`
+- `bookings_confirmed_reminder_idx` on `(brand_id, start_at, reminder_sent_at)` where `deleted_at is null and status = 'confirmed'`
 
 ### `public.subscriptions`
 
@@ -274,6 +285,7 @@ Indexes:
 - `brand_id uuid -> public.brands(id)`
 - `customer_id uuid` (FK: `(customer_id, brand_id) -> public.customers(id, brand_id)`)
 - `subscription_id uuid` (nullable; FK: `(subscription_id, brand_id) -> public.subscriptions(id, brand_id)`)
+- `booking_id uuid` (nullable; FK: `(booking_id, brand_id) -> public.bookings(id, brand_id)`)
 - `provider text` (default `stripe`)
 - `provider_payment_id text`
 - `amount_cents integer`
@@ -290,6 +302,65 @@ Indexes:
 
 - `payments_provider_id_idx` on `(provider, provider_payment_id)` where `deleted_at is null`
 - `payments_customer_paid_at_idx` on `(brand_id, customer_id, paid_at)` where `deleted_at is null`
+- `payments_booking_lookup_idx` on `(brand_id, booking_id)` where `deleted_at is null and booking_id is not null`
+
+### `public.instructor_scheduling_settings`
+
+- `id uuid`
+- `brand_id uuid -> public.brands(id)`
+- `instructor_id uuid -> public.instructors(id)` (brand membership validated by trigger)
+- `timezone text` (default `UTC`)
+- `buffer_minutes integer` (default `15`)
+- `advance_booking_days integer` (default `90`)
+- `cancellation_cutoff_hours integer` (default `24`)
+- `metadata jsonb`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+- `created_by uuid -> auth.users(id)`
+- `deleted_at timestamptz`
+
+Indexes:
+
+- `instructor_scheduling_settings_brand_instructor_unique` on `(brand_id, instructor_id)` where `deleted_at is null`
+
+### `public.instructor_weekly_availability`
+
+- `id uuid`
+- `brand_id uuid -> public.brands(id)`
+- `instructor_id uuid -> public.instructors(id)` (brand membership validated by trigger)
+- `day_of_week smallint` (`0..6`)
+- `start_time time`
+- `end_time time`
+- `is_active boolean`
+- `metadata jsonb`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+- `created_by uuid -> auth.users(id)`
+- `deleted_at timestamptz`
+
+Indexes:
+
+- `instructor_weekly_availability_lookup_idx` on `(brand_id, instructor_id, day_of_week)` where `deleted_at is null and is_active = true`
+
+### `public.instructor_date_overrides`
+
+- `id uuid`
+- `brand_id uuid -> public.brands(id)`
+- `instructor_id uuid -> public.instructors(id)` (brand membership validated by trigger)
+- `override_date date`
+- `is_available boolean`
+- `start_time time` (required when `is_available = true`)
+- `end_time time` (required when `is_available = true`)
+- `metadata jsonb`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+- `created_by uuid -> auth.users(id)`
+- `deleted_at timestamptz`
+
+Indexes:
+
+- `instructor_date_overrides_unique` on `(brand_id, instructor_id, override_date)` where `deleted_at is null`
+- `instructor_date_overrides_lookup_idx` on `(brand_id, instructor_id, override_date)` where `deleted_at is null`
 
 ### `public.content_access`
 
