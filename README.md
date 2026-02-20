@@ -62,6 +62,17 @@ Copy `.env.example` to `.env.local` and set:
 npm run build
 ```
 
+## Course Hosting (WO-2026-004)
+
+This repo now includes course hosting with VideoNest embed fallback:
+
+- Student catalog: `/courses`
+- Student dashboard: `/dashboard/courses`
+- Course player: `/courses/[courseId]`
+- Instructor admin: `/admin/courses`
+
+Details: `docs/course-hosting.md`
+
 ## Project Structure
 
 ```text
