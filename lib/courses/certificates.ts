@@ -21,7 +21,7 @@ export const canAccessCertificatePdf = (params: {
 };
 
 export const applyCertificateCourseLookupFilters = <T extends {
-  eq: (column: string, value: unknown) => T;
+  eq: (column: string, value: string) => T;
   is: (column: string, value: null) => T;
 }>(query: T, courseId: string): T => {
   return query.eq("id", courseId).is("deleted_at", null);

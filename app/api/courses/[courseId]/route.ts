@@ -10,156 +10,9 @@ import {
   readJsonBody,
 } from "@/lib/courses/api";
 import { getCourseRequestContext } from "@/lib/courses/context";
-import {
-  loadCourseById,
-  loadCourseStructure,
-  loadEnrollment,
-  loadProgressRows,
-  loadVisibleCourseById,
-} from "@/lib/courses/learning";
-import { buildLessonUnlockStates, sortLessonsForUnlock } from "@/lib/courses/drip";
-import { calculateCoursePercent, findFirstIncompleteLessonId } from "@/lib/courses/progress";
-import type { CourseRecord, EnrollmentRecord } from "@/lib/courses/types";
+import type { CourseRecord } from "@/lib/courses/types";
 
-type CourseDetailsGetDependencies = {
-  getCourseRequestContext: typeof getCourseRequestContext;
-  loadCourseById: typeof loadCourseById;
-  loadVisibleCourseById: typeof loadVisibleCourseById;
-  loadEnrollment: typeof loadEnrollment;
-  loadCourseStructure: typeof loadCourseStructure;
-  sortLessonsForUnlock: typeof sortLessonsForUnlock;
-  loadProgressRows: typeof loadProgressRows;
-  buildLessonUnlockStates: typeof buildLessonUnlockStates;
-  calculateCoursePercent: typeof calculateCoursePercent;
-  findFirstIncompleteLessonId: typeof findFirstIncompleteLessonId;
-};
-
-const defaultCourseDetailsGetDependencies: CourseDetailsGetDependencies = {
-  getCourseRequestContext,
-  loadCourseById,
-  loadVisibleCourseById,
-  loadEnrollment,
-  loadCourseStructure,
-  sortLessonsForUnlock,
-  loadProgressRows,
-  buildLessonUnlockStates,
-  calculateCoursePercent,
-  findFirstIncompleteLessonId,
-};
-
-export async function runCourseDetailsGet(
-  request: Request,
-  params: { courseId: string },
-  dependencies: CourseDetailsGetDependencies = defaultCourseDetailsGetDependencies,
-) {
-  try {
-    const context = await dependencies.getCourseRequestContext();
-
-    const { courseId } = params;
-    const includeContent = new URL(request.url).searchParams.get("include") !== "summary";
-
-    let course: CourseRecord | null = null;
-
-    if (context.isBrandAdmin) {
-      course = await dependencies.loadCourseById(context.supabase, context.brand.id, courseId);
-      if (!course) {
-        course = await dependencies.loadVisibleCourseById(context.supabase, context.brand.slug, courseId);
-      }
-    } else {
-      course = await dependencies.loadVisibleCourseById(context.supabase, context.brand.slug, courseId);
-    }
-
-    if (!course) {
-      return NextResponse.json({ ok: false, error: "Course not found." }, { status: 404 });
-    }
-
-    let enrollment: EnrollmentRecord | null = null;
-
-    if (context.customerId) {
-      enrollment = await dependencies.loadEnrollment(
-        context.supabase,
-        context.brand.id,
-        context.customerId,
-        courseId,
-      );
-    }
-
-    if (!includeContent || (!context.isBrandAdmin && !enrollment)) {
-      return NextResponse.json({
-        ok: true,
-        course,
-        enrollment,
-        requires_enrollment: !context.isBrandAdmin && !enrollment,
-      });
-    }
-
-    const structure = await dependencies.loadCourseStructure(context.supabase, context.brand.id, courseId);
-    const orderedLessons = dependencies.sortLessonsForUnlock(structure.lessons, structure.moduleOrderById);
-    const progressRows = enrollment ? await dependencies.loadProgressRows(context.supabase, enrollment.id) : [];
-    const progressByLessonId = new Map(progressRows.map((row) => [row.lesson_id, row]));
-    const unlockStates = enrollment
-      ? dependencies.buildLessonUnlockStates({
-          lessons: orderedLessons,
-          moduleOrderById: structure.moduleOrderById,
-          enrollment,
-          progressRows,
-          courseMetadata: structure.course.metadata,
-        })
-      : [];
-    const unlockByLessonId = new Map(unlockStates.map((item) => [item.lessonId, item]));
-
-    const modules = structure.modules.map((module) => ({
-      ...module,
-      lessons: orderedLessons
-        .filter((lesson) => lesson.module_id === module.id)
-        .map((lesson) => ({
-          ...lesson,
-          progress: progressByLessonId.get(lesson.id) ?? null,
-          unlock: unlockByLessonId.get(lesson.id) ?? null,
-        })),
-    }));
-
-    const progressPercent = dependencies.calculateCoursePercent(orderedLessons, progressRows);
-    const resumeLessonId = dependencies.findFirstIncompleteLessonId(orderedLessons, progressRows);
-
-    let certificate: {
-      id: string;
-      certificate_number: string | null;
-      issued_at: string;
-    } | null = null;
-
-    if (enrollment && context.customerId) {
-      const { data: certData, error: certError } = await context.supabase
-        .from("certificates")
-        .select("id,certificate_number,issued_at")
-        .eq("brand_id", context.brand.id)
-        .eq("customer_id", context.customerId)
-        .eq("course_id", courseId)
-        .is("deleted_at", null)
-        .order("issued_at", { ascending: false })
-        .maybeSingle();
-
-      if (certError) {
-        return NextResponse.json({ ok: false, error: certError.message }, { status: 500 });
-      }
-
-      certificate = (certData as { id: string; certificate_number: string | null; issued_at: string } | null) ?? null;
-    }
-
-    return NextResponse.json({
-      ok: true,
-      course,
-      enrollment,
-      modules,
-      progress_rows: progressRows,
-      progress_percent: progressPercent,
-      resume_lesson_id: resumeLessonId,
-      certificate,
-    });
-  } catch (error) {
-    return handleCourseApiError(error);
-  }
-}
+import { runCourseDetailsGet } from "./course-details-get";
 
 export async function GET(
   request: Request,
@@ -175,6 +28,23 @@ export async function PATCH(
   try {
     const context = await getCourseRequestContext({ requireAdmin: true, requireCustomer: false });
     const body = await readJsonBody(request);
+
+    const { data: existingCourseData, error: existingCourseError } = await context.supabase
+      .from("courses")
+      .select(
+        "id,brand_id,title,description,level,duration_minutes,metadata,created_at,updated_at,deleted_at",
+      )
+      .eq("id", params.courseId)
+      .eq("brand_id", context.brand.id)
+      .maybeSingle();
+
+    if (existingCourseError) {
+      return NextResponse.json({ ok: false, error: existingCourseError.message }, { status: 400 });
+    }
+
+    if (!existingCourseData) {
+      return NextResponse.json({ ok: false, error: "Course not found." }, { status: 404 });
+    }
 
     const updates: Record<string, unknown> = {};
 
@@ -194,8 +64,40 @@ export async function PATCH(
       updates.duration_minutes = durationMinutes;
     }
 
+    const metadataPatch: Record<string, unknown> = {};
+    let hasMetadataPatch = false;
+
     if (body.metadata !== undefined) {
-      updates.metadata = asJsonObject(body.metadata) ?? {};
+      Object.assign(metadataPatch, asJsonObject(body.metadata) ?? {});
+      hasMetadataPatch = true;
+    }
+
+    if (body.category !== undefined) {
+      metadataPatch.category = asNullableString(body.category);
+      hasMetadataPatch = true;
+    }
+
+    if (body.thumbnail_url !== undefined) {
+      metadataPatch.thumbnail_url = asNullableString(body.thumbnail_url);
+      hasMetadataPatch = true;
+    }
+
+    const publish = asBoolean(body.publish);
+    if (publish === true) {
+      metadataPatch.published_at = new Date().toISOString();
+      hasMetadataPatch = true;
+    }
+
+    if (publish === false) {
+      metadataPatch.published_at = null;
+      hasMetadataPatch = true;
+    }
+
+    if (hasMetadataPatch) {
+      updates.metadata = {
+        ...(asJsonObject((existingCourseData as CourseRecord).metadata) ?? {}),
+        ...metadataPatch,
+      };
     }
 
     const archived = asBoolean(body.archived);
@@ -207,34 +109,16 @@ export async function PATCH(
       updates.deleted_at = null;
     }
 
-    const visibleOnBrand = asBoolean(body.visible_on_brand);
+    let visibleOnBrand = asBoolean(body.visible_on_brand);
+    if (visibleOnBrand === null && publish !== null) {
+      visibleOnBrand = publish;
+    }
 
     if (Object.keys(updates).length === 0 && visibleOnBrand === null) {
       return NextResponse.json({ ok: false, error: "No valid fields to update." }, { status: 400 });
     }
 
-    let updatedCourse: CourseRecord | null = null;
-
-    if (Object.keys(updates).length === 0 && visibleOnBrand !== null) {
-      const { data, error } = await context.supabase
-        .from("courses")
-        .select(
-          "id,brand_id,title,description,level,duration_minutes,metadata,created_at,updated_at,deleted_at",
-        )
-        .eq("id", params.courseId)
-        .eq("brand_id", context.brand.id)
-        .maybeSingle();
-
-      if (error) {
-        return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
-      }
-
-      if (!data) {
-        return NextResponse.json({ ok: false, error: "Course not found." }, { status: 404 });
-      }
-
-      updatedCourse = data as CourseRecord;
-    }
+    let updatedCourse: CourseRecord | null = existingCourseData as CourseRecord;
 
     if (Object.keys(updates).length > 0) {
       const { data, error } = await context.supabase
@@ -287,10 +171,6 @@ export async function PATCH(
           return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
         }
       }
-    }
-
-    if (!updatedCourse) {
-      updatedCourse = await loadCourseById(context.supabase, context.brand.id, params.courseId);
     }
 
     return NextResponse.json({ ok: true, course: updatedCourse });

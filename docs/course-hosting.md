@@ -34,10 +34,12 @@ This repository now includes a Teachable-style course hosting baseline with:
 
 ## VideoNest note
 
-VideoNest SDK/webhook integration is not wired yet.
-The current implementation supports:
+Instructor admin now includes VideoNest upload wiring via `uploadVideo()` with chunked client upload, progress callbacks, and `VideonestPreview` playback after upload.
 
-- direct `video_url` playback via HTML5 video, and
-- VideoNest iframe embedding via `metadata.videonest_video_id`.
+Implemented endpoints/components:
 
-This follows WO stop-condition fallback behavior with a placeholder embed path until full API integration is added.
+- `POST|PATCH /api/videonest/upload` for authenticated admin upload chunking + finalize
+- Local `videonest-sdk` compatibility module at `lib/videonest/sdk.tsx`
+- Lesson metadata linkage through `metadata.videonest_video_id`
+
+Learner playback continues to support both direct `video_url` HTML5 video and VideoNest embed IDs.

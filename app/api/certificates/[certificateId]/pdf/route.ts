@@ -52,8 +52,9 @@ export async function GET(
       return NextResponse.json({ ok: false, error: "Forbidden." }, { status: 403 });
     }
 
-    const courseQuery = applyCertificateCourseLookupFilters(
-      context.supabase.from("courses").select("title"),
+    const baseCourseQuery = context.supabase.from("courses").select("title");
+    const courseQuery = applyCertificateCourseLookupFilters<typeof baseCourseQuery>(
+      baseCourseQuery,
       certificate.course_id,
     );
     const { data: courseData, error: courseError } = await courseQuery.maybeSingle();
