@@ -373,7 +373,7 @@ export async function POST(request: Request) {
         }
       }
 
-      for (const requestItem of dedupedRequests.values()) {
+      for (const requestItem of Array.from(dedupedRequests.values())) {
         await mergeAnonymousSessionsForUser({
           config,
           userId: requestItem.userId,

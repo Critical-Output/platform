@@ -13,6 +13,14 @@ import { getCourseRequestContext } from "@/lib/courses/context";
 import { orderDashboardLessonIds } from "@/lib/courses/dashboard";
 import type { CourseRecord, EnrollmentRecord, ProgressRecord } from "@/lib/courses/types";
 
+const asMetadataObject = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+};
+
 export async function GET(request: Request) {
   try {
     const scope = new URL(request.url).searchParams.get("scope");
@@ -41,7 +49,82 @@ export async function GET(request: Request) {
         return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ ok: true, courses: (data ?? []) as CourseRecord[] });
+      const courses = (data ?? []) as CourseRecord[];
+      const courseIds = courses.map((course) => course.id);
+
+      const [visibilityResult, enrollmentResult] = await Promise.all([
+        courseIds.length > 0
+          ? context.supabase
+              .from("courses_brands")
+              .select("course_id")
+              .eq("brand_id", context.brand.id)
+              .in("course_id", courseIds)
+              .is("deleted_at", null)
+          : Promise.resolve({ data: [], error: null }),
+        courseIds.length > 0
+          ? context.supabase
+              .from("enrollments")
+              .select("course_id,status")
+              .eq("brand_id", context.brand.id)
+              .in("course_id", courseIds)
+              .is("deleted_at", null)
+              .in("status", ["active", "completed"])
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (visibilityResult.error) {
+        return NextResponse.json({ ok: false, error: visibilityResult.error.message }, { status: 500 });
+      }
+
+      if (enrollmentResult.error) {
+        return NextResponse.json({ ok: false, error: enrollmentResult.error.message }, { status: 500 });
+      }
+
+      const visibleCourseIds = new Set(
+        ((visibilityResult.data ?? []) as Array<{ course_id: string | null }>)
+          .map((row) => row.course_id)
+          .filter((courseId): courseId is string => Boolean(courseId)),
+      );
+
+      const enrollmentStatsByCourse = new Map<string, { enrollmentCount: number; completionCount: number }>();
+      for (const row of (enrollmentResult.data ?? []) as Array<{ course_id: string | null; status: string | null }>) {
+        if (!row.course_id) continue;
+
+        const existing = enrollmentStatsByCourse.get(row.course_id) ?? {
+          enrollmentCount: 0,
+          completionCount: 0,
+        };
+        existing.enrollmentCount += 1;
+        if (row.status === "completed") {
+          existing.completionCount += 1;
+        }
+        enrollmentStatsByCourse.set(row.course_id, existing);
+      }
+
+      const adminCourses = courses.map((course) => {
+        const stats = enrollmentStatsByCourse.get(course.id) ?? {
+          enrollmentCount: 0,
+          completionCount: 0,
+        };
+        const completionRate =
+          stats.enrollmentCount > 0
+            ? Math.round((stats.completionCount / stats.enrollmentCount) * 10000) / 100
+            : 0;
+        const metadata = asMetadataObject(course.metadata);
+
+        return {
+          ...course,
+          category: typeof metadata.category === "string" ? metadata.category : null,
+          thumbnail_url: typeof metadata.thumbnail_url === "string" ? metadata.thumbnail_url : null,
+          published_at: typeof metadata.published_at === "string" ? metadata.published_at : null,
+          visible_on_brand: visibleCourseIds.has(course.id),
+          enrollment_count: stats.enrollmentCount,
+          completion_count: stats.completionCount,
+          completion_rate_percent: completionRate,
+        };
+      });
+
+      return NextResponse.json({ ok: true, courses: adminCourses });
     }
 
     const { data: catalogData, error: catalogError } = await context.supabase.rpc(
@@ -129,14 +212,14 @@ export async function GET(request: Request) {
     const moduleIds = modules.map((row) => row.id);
     const courseIdByModuleId = new Map<string, string>(modules.map((row) => [row.id, row.course_id]));
     const modulesByCourse = new Map<string, Array<{ id: string; position: number; created_at: string }>>();
-    for (const module of modules) {
-      const rows = modulesByCourse.get(module.course_id) ?? [];
+    for (const moduleRow of modules) {
+      const rows = modulesByCourse.get(moduleRow.course_id) ?? [];
       rows.push({
-        id: module.id,
-        position: module.position,
-        created_at: module.created_at,
+        id: moduleRow.id,
+        position: moduleRow.position,
+        created_at: moduleRow.created_at,
       });
-      modulesByCourse.set(module.course_id, rows);
+      modulesByCourse.set(moduleRow.course_id, rows);
     }
 
     let lessonRows: Array<{ id: string; module_id: string; position: number; created_at: string }> = [];
@@ -223,7 +306,20 @@ export async function POST(request: Request) {
     const level = asNullableString(body.level);
     const durationMinutes = asIntOrNull(body.duration_minutes);
     const metadata = asJsonObject(body.metadata) ?? {};
-    const visibleOnBrand = asBoolean(body.visible_on_brand) ?? true;
+    if (body.category !== undefined) {
+      metadata.category = asNullableString(body.category);
+    }
+    if (body.thumbnail_url !== undefined) {
+      metadata.thumbnail_url = asNullableString(body.thumbnail_url);
+    }
+    const publish = asBoolean(body.publish);
+    if (publish === true) {
+      metadata.published_at = new Date().toISOString();
+    }
+    if (publish === false) {
+      metadata.published_at = null;
+    }
+    const visibleOnBrand = asBoolean(body.visible_on_brand) ?? publish ?? true;
 
     const { data: courseData, error: courseError } = await context.supabase
       .from("courses")
