@@ -48,6 +48,7 @@ Copy `.env.example` to `.env.local` and set:
 - `RESEND_API_KEY` (booking email confirmations)
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (booking SMS)
 - `BOOKING_REMINDER_API_KEY` (protects reminder dispatch endpoint)
+- `OFFERS_API_KEY` (protects intelligence offer APIs)
 
 ### Supabase notes
 
@@ -72,6 +73,16 @@ This repo now includes course hosting with VideoNest embed fallback:
 - Instructor admin: `/admin/courses`
 
 Details: `docs/course-hosting.md`
+
+## Intelligence Engine (WO-2026-009)
+
+This repo now includes personalized cross-sell offer selection and tracking:
+
+- Offer selection API: `POST /api/offers/select`
+- Offer performance tracking API: `POST /api/offers/track`
+- Journey + funnel stage detection with trigger-based upsells and win-back logic
+
+Details: `docs/intelligence-engine.md`
 
 ## Project Structure
 
